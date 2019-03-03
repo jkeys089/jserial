@@ -1,0 +1,4 @@
+.idea
+humanames-fuzz.zip
+fuzzdata/crashers
+fuzzdata/suppressions

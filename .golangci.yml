@@ -1,0 +1,44 @@
+run:
+  issues-exit-code: 1
+  tests: false
+
+output:
+  format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+  govet:
+    check-shadowing: true
+  golint:
+    min-confidence: 0
+  gofmt:
+    simplify: true
+  goimports:
+    local-prefixes: scm.mdeo.co
+  gocyclo:
+    min-complexity: 10
+  maligned:
+    suggest-new: true
+  dupl:
+    threshold: 100
+  goconst:
+    min-len: 2
+    min-occurrences: 2
+  lll:
+    line-length: 120
+    tab-width: 1
+
+linters:
+  enable-all: true
+  disable:
+    - depguard
+    - gochecknoglobals
+    - gochecknoinits
+    - misspell
+    - nakedret
+    - prealloc
+    - stylecheck
