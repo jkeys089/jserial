@@ -182,7 +182,7 @@ var primitiveHandlers = map[string]primitiveHandler{
 		if charCode, err = sop.readUInt16(); err != nil {
 			err = errors.Wrap(err, "error reading char primitive")
 		} else {
-			char = string(charCode)
+			char = string(rune(charCode))
 		}
 		return
 	},
