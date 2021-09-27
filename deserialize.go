@@ -1,9 +1,11 @@
 package jserial
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/binary"
-	"fmt"
+	"encoding/hex"
+	"io"
 	"strings"
 	"time"
 
@@ -12,18 +14,24 @@ import (
 
 // ParseSerializedObject parses a serialized java object.
 func ParseSerializedObject(buf []byte) (content []interface{}, err error) {
-	sop := &serializedObjectParser{
-		buf: buf,
-	}
+	sop := newSerializedObjectParser(bytes.NewReader(buf))
+	return sop.ParseSerializedObject()
+}
+
+// ParseSerializedObject parses a serialized java object from stream.
+func (sop *serializedObjectParser) ParseSerializedObject() (content []interface{}, err error) {
 	if err = sop.magic(); err != nil {
 		return
 	}
 	if err = sop.version(); err != nil {
 		return
 	}
-	for sop.pos < len(sop.buf) {
+	for !sop.end() {
 		var nxt interface{}
 		if nxt, err = sop.content(nil); err != nil {
+			if errors.Cause(err) == io.EOF {
+				err = errors.New("premature end of input")
+			}
 			return
 		}
 		content = append(content, nxt)
@@ -242,9 +250,18 @@ var primitiveHandlers = map[string]primitiveHandler{
 // serializedObjectParser reads serialized java objects
 // see: https://docs.oracle.com/javase/8/docs/platform/serialization/spec/protocol.html
 type serializedObjectParser struct {
-	buf     []byte
-	pos     int
+	buf     bytes.Buffer
+	rd      *bufio.Reader
 	handles []interface{}
+}
+
+const bufferSize = 1024
+
+// newSerializedObjectParser
+func newSerializedObjectParser(rd io.Reader) *serializedObjectParser {
+	return &serializedObjectParser{
+		rd: bufio.NewReaderSize(rd, bufferSize),
+	}
 }
 
 // newHandle adds a parsed object to the existing indexed handles which can be used later to lookup references to
@@ -284,117 +301,89 @@ func (sop *serializedObjectParser) content(allowedNames map[string]bool) (conten
 
 }
 
-// step moves the current buffer position forward by cnt bytes and returns the previous position prior to advancing
-func (sop *serializedObjectParser) step(cnt int) (pos int, err error) {
-	pos = sop.pos
-	sop.pos += cnt
-	if sop.pos > len(sop.buf) {
-		err = errors.New("premature end of input")
+// end check has next byte in stream
+func (sop *serializedObjectParser) end() bool {
+	if sop.rd.Buffered() == 0 {
+		_, eof := sop.rd.Peek(1)
+		return eof != nil
 	}
-	return
+	return false
 }
 
 // readString reads a string of length cnt bytes
 func (sop *serializedObjectParser) readString(cnt int, asHex bool) (s string, err error) {
-	var pos int
-	if pos, err = sop.step(cnt); err != nil {
+	sop.buf.Reset()
+	if _, err = io.CopyN(&sop.buf, sop.rd, int64(cnt)); err != nil {
 		err = errors.Wrap(err, "error reading string")
 		return
 	}
 	if asHex {
-		s = fmt.Sprintf("%x", sop.buf[pos:sop.pos])
+		s = hex.EncodeToString(sop.buf.Bytes())
 	} else {
-		s = string(sop.buf[pos:sop.pos])
+		s = sop.buf.String()
 	}
 	return
 }
 
 func (sop *serializedObjectParser) readUInt8() (x uint8, err error) {
-	var offset int
-	if offset, err = sop.step(1); err == nil {
-		if err = binary.Read(bytes.NewReader(sop.buf[offset:offset+1]), binary.BigEndian, &x); err != nil {
-			err = errors.Wrap(err, "error reading uint8")
-		}
+	if err = binary.Read(sop.rd, binary.BigEndian, &x); err != nil {
+		err = errors.Wrap(err, "error reading uint8")
 	}
 	return
 }
 
 func (sop *serializedObjectParser) readInt8() (x int8, err error) {
-	var offset int
-	if offset, err = sop.step(1); err == nil {
-		if err = binary.Read(bytes.NewReader(sop.buf[offset:offset+1]), binary.BigEndian, &x); err != nil {
-			err = errors.Wrap(err, "error reading int8")
-		}
+	if err := binary.Read(sop.rd, binary.BigEndian, &x); err != nil {
+		err = errors.Wrap(err, "error reading int8")
 	}
 	return
 }
 
 func (sop *serializedObjectParser) readUInt16() (x uint16, err error) {
-	var offset int
-	if offset, err = sop.step(2); err == nil {
-		if err = binary.Read(bytes.NewReader(sop.buf[offset:offset+2]), binary.BigEndian, &x); err != nil {
-			err = errors.Wrap(err, "error reading uint16")
-		}
+	if err = binary.Read(sop.rd, binary.BigEndian, &x); err != nil {
+		err = errors.Wrap(err, "error reading uint16")
 	}
 	return
 }
 
 func (sop *serializedObjectParser) readInt16() (x int16, err error) {
-	var offset int
-	if offset, err = sop.step(2); err == nil {
-		if err = binary.Read(bytes.NewReader(sop.buf[offset:offset+2]), binary.BigEndian, &x); err != nil {
-			err = errors.Wrap(err, "error reading int16")
-		}
+	if err = binary.Read(sop.rd, binary.BigEndian, &x); err != nil {
+		err = errors.Wrap(err, "error reading int16")
 	}
 	return
 }
 
 func (sop *serializedObjectParser) readUInt32() (x uint32, err error) {
-	var offset int
-	if offset, err = sop.step(4); err == nil {
-		if err = binary.Read(bytes.NewReader(sop.buf[offset:offset+4]), binary.BigEndian, &x); err != nil {
-			err = errors.Wrap(err, "error reading uint32")
-		}
+	if err = binary.Read(sop.rd, binary.BigEndian, &x); err != nil {
+		err = errors.Wrap(err, "error reading uint32")
 	}
 	return
 }
 
 func (sop *serializedObjectParser) readInt32() (x int32, err error) {
-	var offset int
-	if offset, err = sop.step(4); err == nil {
-		if err = binary.Read(bytes.NewReader(sop.buf[offset:offset+4]), binary.BigEndian, &x); err != nil {
-			err = errors.Wrap(err, "error reading int32")
-		}
+	if err = binary.Read(sop.rd, binary.BigEndian, &x); err != nil {
+		err = errors.Wrap(err, "error reading int32")
 	}
 	return
 }
 
 func (sop *serializedObjectParser) readFloat32() (x float32, err error) {
-	var offset int
-	if offset, err = sop.step(4); err == nil {
-		if err = binary.Read(bytes.NewReader(sop.buf[offset:offset+4]), binary.BigEndian, &x); err != nil {
-			err = errors.Wrap(err, "error reading float32")
-		}
+	if err = binary.Read(sop.rd, binary.BigEndian, &x); err != nil {
+		err = errors.Wrap(err, "error reading float32")
 	}
 	return
 }
 
 func (sop *serializedObjectParser) readInt64() (x int64, err error) {
-	var offset int
-	if offset, err = sop.step(8); err == nil {
-		if err = binary.Read(bytes.NewReader(sop.buf[offset:offset+8]), binary.BigEndian, &x); err != nil {
-			err = errors.Wrap(err, "error reading int64")
-		}
+	if err = binary.Read(sop.rd, binary.BigEndian, &x); err != nil {
+		err = errors.Wrap(err, "error reading int64")
 	}
 	return
 }
 
 func (sop *serializedObjectParser) readFloat64() (x float64, err error) {
-	var offset int
-	if offset, err = sop.step(8); err == nil {
-		if err = binary.Read(bytes.NewReader(sop.buf[offset:offset+8]), binary.BigEndian, &x); err != nil {
-			err = errors.Wrap(err, "error reading float64")
-		}
+	if err = binary.Read(sop.rd, binary.BigEndian, &x); err != nil {
+		err = errors.Wrap(err, "error reading float64")
 	}
 	return
 }
@@ -728,11 +717,10 @@ func parseBlockData(sop *serializedObjectParser) (bd interface{}, err error) {
 		err = errors.Wrap(err, "error parsing block data size")
 		return
 	}
-	var startPos int
-	if startPos, err = sop.step(int(size)); err != nil {
-		return
+	data := make([]byte, size)
+	if _, err = io.ReadFull(sop.rd, data); err == nil {
+		bd = data
 	}
-	bd = sop.buf[startPos:sop.pos]
 	return
 }
 
@@ -742,11 +730,11 @@ func parseBlockDataLong(sop *serializedObjectParser) (bdl interface{}, err error
 		err = errors.Wrap(err, "error parsing block data long size")
 		return
 	}
-	var startPos int
-	if startPos, err = sop.step(int(size)); err != nil {
+	data := make([]byte, size)
+	if _, err = io.ReadFull(sop.rd, data); err == nil {
+		bdl = data
 		return
 	}
-	bdl = sop.buf[startPos:sop.pos]
 	return
 }
 
