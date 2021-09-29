@@ -14,12 +14,12 @@ import (
 
 // ParseSerializedObject parses a serialized java object.
 func ParseSerializedObject(buf []byte) (content []interface{}, err error) {
-	sop := newSerializedObjectParser(bytes.NewReader(buf))
+	sop := NewSerializedObjectParser(bytes.NewReader(buf))
 	return sop.ParseSerializedObject()
 }
 
 // ParseSerializedObject parses a serialized java object from stream.
-func (sop *serializedObjectParser) ParseSerializedObject() (content []interface{}, err error) {
+func (sop *SerializedObjectParser) ParseSerializedObject() (content []interface{}, err error) {
 	if err = sop.magic(); err != nil {
 		return
 	}
@@ -155,7 +155,7 @@ var allowedClazzNames = map[string]bool{
 }
 
 // parser is a func capable of reading a single serialized type
-type parser func(sop *serializedObjectParser) (interface{}, error)
+type parser func(sop *SerializedObjectParser) (interface{}, error)
 
 // knownParsers maps serialized names to corresponding parser implementations
 var knownParsers map[string]parser
@@ -175,17 +175,17 @@ var KnownPostProcs = map[string]PostProc{
 }
 
 // primitiveHandler are used to read primitive values
-type primitiveHandler func(sop *serializedObjectParser) (interface{}, error)
+type primitiveHandler func(sop *SerializedObjectParser) (interface{}, error)
 
 // primitiveHandlers maps serialized primitive identifiers to a corresponding primitiveHandler
 var primitiveHandlers = map[string]primitiveHandler{
-	"B": func(sop *serializedObjectParser) (b interface{}, err error) {
+	"B": func(sop *SerializedObjectParser) (b interface{}, err error) {
 		if b, err = sop.readInt8(); err != nil {
 			err = errors.Wrap(err, "error reading byte primitive")
 		}
 		return
 	},
-	"C": func(sop *serializedObjectParser) (char interface{}, err error) {
+	"C": func(sop *SerializedObjectParser) (char interface{}, err error) {
 		var charCode uint16
 		if charCode, err = sop.readUInt16(); err != nil {
 			err = errors.Wrap(err, "error reading char primitive")
@@ -194,37 +194,37 @@ var primitiveHandlers = map[string]primitiveHandler{
 		}
 		return
 	},
-	"D": func(sop *serializedObjectParser) (double interface{}, err error) {
+	"D": func(sop *SerializedObjectParser) (double interface{}, err error) {
 		if double, err = sop.readFloat64(); err != nil {
 			err = errors.Wrap(err, "error reading double primitive")
 		}
 		return
 	},
-	"F": func(sop *serializedObjectParser) (f32 interface{}, err error) {
+	"F": func(sop *SerializedObjectParser) (f32 interface{}, err error) {
 		if f32, err = sop.readFloat32(); err != nil {
 			err = errors.Wrap(err, "error reading float primitive")
 		}
 		return
 	},
-	"I": func(sop *serializedObjectParser) (i32 interface{}, err error) {
+	"I": func(sop *SerializedObjectParser) (i32 interface{}, err error) {
 		if i32, err = sop.readInt32(); err != nil {
 			err = errors.Wrap(err, "error reading int primitive")
 		}
 		return
 	},
-	"J": func(sop *serializedObjectParser) (long interface{}, err error) {
+	"J": func(sop *SerializedObjectParser) (long interface{}, err error) {
 		if long, err = sop.readInt64(); err != nil {
 			err = errors.Wrap(err, "error reading long primitive")
 		}
 		return
 	},
-	"S": func(sop *serializedObjectParser) (short interface{}, err error) {
+	"S": func(sop *SerializedObjectParser) (short interface{}, err error) {
 		if short, err = sop.readInt16(); err != nil {
 			err = errors.Wrap(err, "error reading short primitive")
 		}
 		return
 	},
-	"Z": func(sop *serializedObjectParser) (b interface{}, err error) {
+	"Z": func(sop *SerializedObjectParser) (b interface{}, err error) {
 		var x int8
 		if x, err = sop.readInt8(); err != nil {
 			err = errors.Wrap(err, "error reading boolean primitive")
@@ -233,13 +233,13 @@ var primitiveHandlers = map[string]primitiveHandler{
 		}
 		return
 	},
-	"L": func(sop *serializedObjectParser) (obj interface{}, err error) {
+	"L": func(sop *SerializedObjectParser) (obj interface{}, err error) {
 		if obj, err = sop.content(nil); err != nil {
 			err = errors.Wrap(err, "error reading object primitive")
 		}
 		return
 	},
-	"[": func(sop *serializedObjectParser) (arr interface{}, err error) {
+	"[": func(sop *SerializedObjectParser) (arr interface{}, err error) {
 		if arr, err = sop.content(nil); err != nil {
 			err = errors.Wrap(err, "error reading array primitive")
 		}
@@ -247,9 +247,9 @@ var primitiveHandlers = map[string]primitiveHandler{
 	},
 }
 
-// serializedObjectParser reads serialized java objects
+// SerializedObjectParser reads serialized java objects
 // see: https://docs.oracle.com/javase/8/docs/platform/serialization/spec/protocol.html
-type serializedObjectParser struct {
+type SerializedObjectParser struct {
 	buf     bytes.Buffer
 	rd      *bufio.Reader
 	handles []interface{}
@@ -258,21 +258,21 @@ type serializedObjectParser struct {
 const bufferSize = 1024
 
 // newSerializedObjectParser
-func newSerializedObjectParser(rd io.Reader) *serializedObjectParser {
-	return &serializedObjectParser{
+func NewSerializedObjectParser(rd io.Reader) *SerializedObjectParser {
+	return &SerializedObjectParser{
 		rd: bufio.NewReaderSize(rd, bufferSize),
 	}
 }
 
 // newHandle adds a parsed object to the existing indexed handles which can be used later to lookup references to
 // existing objects
-func (sop *serializedObjectParser) newHandle(obj interface{}) interface{} {
+func (sop *SerializedObjectParser) newHandle(obj interface{}) interface{} {
 	sop.handles = append(sop.handles, obj)
 	return obj
 }
 
 // content reads the next object in the stream and parses it
-func (sop *serializedObjectParser) content(allowedNames map[string]bool) (content interface{}, err error) {
+func (sop *SerializedObjectParser) content(allowedNames map[string]bool) (content interface{}, err error) {
 
 	var tc uint8
 	if tc, err = sop.readUInt8(); err != nil {
@@ -302,7 +302,7 @@ func (sop *serializedObjectParser) content(allowedNames map[string]bool) (conten
 }
 
 // end check has next byte in stream
-func (sop *serializedObjectParser) end() bool {
+func (sop *SerializedObjectParser) end() bool {
 	if sop.rd.Buffered() == 0 {
 		_, eof := sop.rd.Peek(1)
 		return eof != nil
@@ -311,7 +311,7 @@ func (sop *serializedObjectParser) end() bool {
 }
 
 // readString reads a string of length cnt bytes
-func (sop *serializedObjectParser) readString(cnt int, asHex bool) (s string, err error) {
+func (sop *SerializedObjectParser) readString(cnt int, asHex bool) (s string, err error) {
 	sop.buf.Reset()
 	if _, err = io.CopyN(&sop.buf, sop.rd, int64(cnt)); err != nil {
 		err = errors.Wrap(err, "error reading string")
@@ -325,63 +325,63 @@ func (sop *serializedObjectParser) readString(cnt int, asHex bool) (s string, er
 	return
 }
 
-func (sop *serializedObjectParser) readUInt8() (x uint8, err error) {
+func (sop *SerializedObjectParser) readUInt8() (x uint8, err error) {
 	if err = binary.Read(sop.rd, binary.BigEndian, &x); err != nil {
 		err = errors.Wrap(err, "error reading uint8")
 	}
 	return
 }
 
-func (sop *serializedObjectParser) readInt8() (x int8, err error) {
+func (sop *SerializedObjectParser) readInt8() (x int8, err error) {
 	if err := binary.Read(sop.rd, binary.BigEndian, &x); err != nil {
 		err = errors.Wrap(err, "error reading int8")
 	}
 	return
 }
 
-func (sop *serializedObjectParser) readUInt16() (x uint16, err error) {
+func (sop *SerializedObjectParser) readUInt16() (x uint16, err error) {
 	if err = binary.Read(sop.rd, binary.BigEndian, &x); err != nil {
 		err = errors.Wrap(err, "error reading uint16")
 	}
 	return
 }
 
-func (sop *serializedObjectParser) readInt16() (x int16, err error) {
+func (sop *SerializedObjectParser) readInt16() (x int16, err error) {
 	if err = binary.Read(sop.rd, binary.BigEndian, &x); err != nil {
 		err = errors.Wrap(err, "error reading int16")
 	}
 	return
 }
 
-func (sop *serializedObjectParser) readUInt32() (x uint32, err error) {
+func (sop *SerializedObjectParser) readUInt32() (x uint32, err error) {
 	if err = binary.Read(sop.rd, binary.BigEndian, &x); err != nil {
 		err = errors.Wrap(err, "error reading uint32")
 	}
 	return
 }
 
-func (sop *serializedObjectParser) readInt32() (x int32, err error) {
+func (sop *SerializedObjectParser) readInt32() (x int32, err error) {
 	if err = binary.Read(sop.rd, binary.BigEndian, &x); err != nil {
 		err = errors.Wrap(err, "error reading int32")
 	}
 	return
 }
 
-func (sop *serializedObjectParser) readFloat32() (x float32, err error) {
+func (sop *SerializedObjectParser) readFloat32() (x float32, err error) {
 	if err = binary.Read(sop.rd, binary.BigEndian, &x); err != nil {
 		err = errors.Wrap(err, "error reading float32")
 	}
 	return
 }
 
-func (sop *serializedObjectParser) readInt64() (x int64, err error) {
+func (sop *SerializedObjectParser) readInt64() (x int64, err error) {
 	if err = binary.Read(sop.rd, binary.BigEndian, &x); err != nil {
 		err = errors.Wrap(err, "error reading int64")
 	}
 	return
 }
 
-func (sop *serializedObjectParser) readFloat64() (x float64, err error) {
+func (sop *SerializedObjectParser) readFloat64() (x float64, err error) {
 	if err = binary.Read(sop.rd, binary.BigEndian, &x); err != nil {
 		err = errors.Wrap(err, "error reading float64")
 	}
@@ -389,7 +389,7 @@ func (sop *serializedObjectParser) readFloat64() (x float64, err error) {
 }
 
 // utf reads a variable length string
-func (sop *serializedObjectParser) utf() (s string, err error) {
+func (sop *SerializedObjectParser) utf() (s string, err error) {
 
 	var offset uint16
 	if offset, err = sop.readUInt16(); err != nil {
@@ -406,7 +406,7 @@ func (sop *serializedObjectParser) utf() (s string, err error) {
 }
 
 // utf reads a large (up to 2^32 bytes) variable length string
-func (sop *serializedObjectParser) utfLong() (s string, err error) {
+func (sop *SerializedObjectParser) utfLong() (s string, err error) {
 
 	var offset uint32
 	if offset, err = sop.readUInt32(); err != nil {
@@ -433,7 +433,7 @@ func (sop *serializedObjectParser) utfLong() (s string, err error) {
 }
 
 // magic checks for the presence of the STREAM_MAGIC value
-func (sop *serializedObjectParser) magic() error {
+func (sop *SerializedObjectParser) magic() error {
 	magicVal, err := sop.readUInt16()
 	if err == nil && magicVal != 0xaced {
 		err = errors.New("magic value STREAM_MAGIC not found")
@@ -442,7 +442,7 @@ func (sop *serializedObjectParser) magic() error {
 }
 
 // version checks to be sure the serialized object is using a supported protocol version
-func (sop *serializedObjectParser) version() error {
+func (sop *SerializedObjectParser) version() error {
 	ver, err := sop.readUInt16()
 	if ver != 5 {
 		err = errors.Errorf("protocol version not recognized: wanted 5 got %d", ver)
@@ -458,7 +458,7 @@ type field struct {
 }
 
 // fieldDesc reads a single field descriptor
-func (sop *serializedObjectParser) fieldDesc() (f *field, err error) {
+func (sop *SerializedObjectParser) fieldDesc() (f *field, err error) {
 
 	var typeDec uint8
 	if typeDec, err = sop.readUInt8(); err != nil {
@@ -496,7 +496,7 @@ func (sop *serializedObjectParser) fieldDesc() (f *field, err error) {
 }
 
 // annotations reads all class annotations
-func (sop *serializedObjectParser) annotations(allowedNames map[string]bool) (anns []interface{}, err error) {
+func (sop *SerializedObjectParser) annotations(allowedNames map[string]bool) (anns []interface{}, err error) {
 	for {
 		var ann interface{}
 		if ann, err = sop.content(allowedNames); err != nil {
@@ -523,7 +523,7 @@ type clazz struct {
 }
 
 // classDesc reads a class descriptor
-func (sop *serializedObjectParser) classDesc() (cls *clazz, err error) {
+func (sop *SerializedObjectParser) classDesc() (cls *clazz, err error) {
 
 	var x interface{}
 	if x, err = sop.content(allowedClazzNames); err != nil {
@@ -545,7 +545,7 @@ func (sop *serializedObjectParser) classDesc() (cls *clazz, err error) {
 }
 
 // parseClassDesc parses a class descriptor
-func parseClassDesc(sop *serializedObjectParser) (x interface{}, err error) {
+func parseClassDesc(sop *SerializedObjectParser) (x interface{}, err error) {
 
 	cls := &clazz{}
 
@@ -604,7 +604,7 @@ func parseClassDesc(sop *serializedObjectParser) (x interface{}, err error) {
 
 }
 
-func parseClass(sop *serializedObjectParser) (cd interface{}, err error) {
+func parseClass(sop *SerializedObjectParser) (cd interface{}, err error) {
 	if cd, err = sop.classDesc(); err != nil {
 		err = errors.Wrap(err, "error parsing class")
 		return
@@ -613,7 +613,7 @@ func parseClass(sop *serializedObjectParser) (cd interface{}, err error) {
 	return
 }
 
-func parseReference(sop *serializedObjectParser) (ref interface{}, err error) {
+func parseReference(sop *SerializedObjectParser) (ref interface{}, err error) {
 	var refIdx int32
 	if refIdx, err = sop.readInt32(); err != nil {
 		err = errors.Wrap(err, "error reading reference index")
@@ -626,7 +626,7 @@ func parseReference(sop *serializedObjectParser) (ref interface{}, err error) {
 	return
 }
 
-func parseArray(sop *serializedObjectParser) (arr interface{}, err error) {
+func parseArray(sop *SerializedObjectParser) (arr interface{}, err error) {
 
 	var cls *clazz
 	if cls, err = sop.classDesc(); err != nil {
@@ -675,7 +675,7 @@ func parseArray(sop *serializedObjectParser) (arr interface{}, err error) {
 }
 
 // newDeferredHandle reserves an object handle slot and returns a func which can set the slot value at a later time
-func (sop *serializedObjectParser) newDeferredHandle() func(interface{}) interface{} {
+func (sop *SerializedObjectParser) newDeferredHandle() func(interface{}) interface{} {
 	idx := len(sop.handles)
 	sop.handles = append(sop.handles, nil)
 	return func(obj interface{}) interface{} {
@@ -684,7 +684,7 @@ func (sop *serializedObjectParser) newDeferredHandle() func(interface{}) interfa
 	}
 }
 
-func parseEnum(sop *serializedObjectParser) (enum interface{}, err error) {
+func parseEnum(sop *SerializedObjectParser) (enum interface{}, err error) {
 
 	var cls *clazz
 	if cls, err = sop.classDesc(); err != nil {
@@ -711,7 +711,7 @@ func parseEnum(sop *serializedObjectParser) (enum interface{}, err error) {
 
 }
 
-func parseBlockData(sop *serializedObjectParser) (bd interface{}, err error) {
+func parseBlockData(sop *SerializedObjectParser) (bd interface{}, err error) {
 	var size uint8
 	if size, err = sop.readUInt8(); err != nil {
 		err = errors.Wrap(err, "error parsing block data size")
@@ -724,7 +724,7 @@ func parseBlockData(sop *serializedObjectParser) (bd interface{}, err error) {
 	return
 }
 
-func parseBlockDataLong(sop *serializedObjectParser) (bdl interface{}, err error) {
+func parseBlockDataLong(sop *SerializedObjectParser) (bdl interface{}, err error) {
 	var size uint32
 	if size, err = sop.readUInt32(); err != nil {
 		err = errors.Wrap(err, "error parsing block data long size")
@@ -738,7 +738,7 @@ func parseBlockDataLong(sop *serializedObjectParser) (bdl interface{}, err error
 	return
 }
 
-func parseString(sop *serializedObjectParser) (str interface{}, err error) {
+func parseString(sop *SerializedObjectParser) (str interface{}, err error) {
 	if str, err = sop.utf(); err != nil {
 		err = errors.Wrap(err, "error parsing string")
 	} else {
@@ -747,7 +747,7 @@ func parseString(sop *serializedObjectParser) (str interface{}, err error) {
 	return
 }
 
-func parseLongString(sop *serializedObjectParser) (longStr interface{}, err error) {
+func parseLongString(sop *SerializedObjectParser) (longStr interface{}, err error) {
 	if longStr, err = sop.utfLong(); err != nil {
 		err = errors.Wrap(err, "error parsing long string")
 	} else {
@@ -756,7 +756,7 @@ func parseLongString(sop *serializedObjectParser) (longStr interface{}, err erro
 	return
 }
 
-func parseNull(_ *serializedObjectParser) (interface{}, error) {
+func parseNull(_ *SerializedObjectParser) (interface{}, error) {
 	return nil, nil
 }
 
@@ -764,12 +764,12 @@ type endBlockT string
 
 const endBlock endBlockT = "endBlock"
 
-func parseEndBlockData(_ *serializedObjectParser) (interface{}, error) {
+func parseEndBlockData(_ *SerializedObjectParser) (interface{}, error) {
 	return endBlock, nil
 }
 
 // values reads primitive field values
-func (sop *serializedObjectParser) values(cls *clazz) (vals map[string]interface{}, err error) {
+func (sop *SerializedObjectParser) values(cls *clazz) (vals map[string]interface{}, err error) {
 
 	var exists bool
 	var handler primitiveHandler
@@ -794,7 +794,7 @@ func (sop *serializedObjectParser) values(cls *clazz) (vals map[string]interface
 }
 
 // annotationsAsMap reads values (when isBlock is false) and merges annotations then calls any relevant post processor
-func (sop *serializedObjectParser) annotationsAsMap(cls *clazz, isBlock bool) (data map[string]interface{}, err error) {
+func (sop *SerializedObjectParser) annotationsAsMap(cls *clazz, isBlock bool) (data map[string]interface{}, err error) {
 
 	if isBlock {
 		data = make(map[string]interface{})
@@ -822,7 +822,7 @@ func (sop *serializedObjectParser) annotationsAsMap(cls *clazz, isBlock bool) (d
 }
 
 // classData reads a serialized class into a generic data structure
-func (sop *serializedObjectParser) classData(cls *clazz) (data map[string]interface{}, err error) {
+func (sop *SerializedObjectParser) classData(cls *clazz) (data map[string]interface{}, err error) {
 
 	if cls == nil {
 		return nil, errors.New("invalid class definition: nil")
@@ -848,7 +848,7 @@ func (sop *serializedObjectParser) classData(cls *clazz) (data map[string]interf
 }
 
 // recursiveClassData recursively reads inheritance tree until it reaches java.lang.object
-func (sop *serializedObjectParser) recursiveClassData(cls *clazz, obj map[string]interface{},
+func (sop *SerializedObjectParser) recursiveClassData(cls *clazz, obj map[string]interface{},
 	seen map[*clazz]bool) error {
 
 	if cls == nil {
@@ -884,7 +884,7 @@ func (sop *serializedObjectParser) recursiveClassData(cls *clazz, obj map[string
 
 }
 
-func parseObject(sop *serializedObjectParser) (obj interface{}, err error) {
+func parseObject(sop *SerializedObjectParser) (obj interface{}, err error) {
 
 	var cls *clazz
 	if cls, err = sop.classDesc(); err != nil {
