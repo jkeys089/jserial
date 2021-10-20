@@ -41,6 +41,7 @@ func (sop *SerializedObjectParser) ParseSerializedObject() (content []interface{
 
 		content = append(content, nxt)
 	}
+
 	return
 }
 
@@ -57,7 +58,6 @@ func ParseSerializedObjectMinimal(buf []byte) (content []interface{}, err error)
 // jsonFriendlyObject recursively filters / formats object fields to be as simple / JSON-like as possible.
 func jsonFriendlyObject(obj interface{}) (jsonObj interface{}) {
 	if m, isMap := obj.(map[string]interface{}); isMap {
-
 		jsonMap := jsonFriendlyMap(m)
 		jsonObj = jsonMap
 
@@ -74,12 +74,12 @@ func jsonFriendlyObject(obj interface{}) (jsonObj interface{}) {
 
 	if arr, isArray := obj.([]interface{}); isArray {
 		jsonObj = jsonFriendlyArray(arr)
+
 		return
 	}
 
 	// default for raw / primitive fields
 	return obj
-
 }
 
 // jsonFriendlyArray recursively filters / formats a deserialized array.
@@ -330,11 +330,13 @@ func (sop *SerializedObjectParser) readString(cnt int, asHex bool) (s string, er
 		err = errors.Wrap(err, "error reading string")
 		return
 	}
+
 	if asHex {
 		s = hex.EncodeToString(sop.buf.Bytes())
 	} else {
 		s = sop.buf.String()
 	}
+
 	return
 }
 
@@ -342,6 +344,7 @@ func (sop *SerializedObjectParser) readUInt8() (x uint8, err error) {
 	if err = binary.Read(sop.rd, binary.BigEndian, &x); err != nil {
 		err = errors.Wrap(err, "error reading uint8")
 	}
+
 	return
 }
 
@@ -349,6 +352,7 @@ func (sop *SerializedObjectParser) readInt8() (x int8, err error) {
 	if err := binary.Read(sop.rd, binary.BigEndian, &x); err != nil {
 		err = errors.Wrap(err, "error reading int8")
 	}
+
 	return
 }
 
@@ -356,6 +360,7 @@ func (sop *SerializedObjectParser) readUInt16() (x uint16, err error) {
 	if err = binary.Read(sop.rd, binary.BigEndian, &x); err != nil {
 		err = errors.Wrap(err, "error reading uint16")
 	}
+
 	return
 }
 
@@ -363,6 +368,7 @@ func (sop *SerializedObjectParser) readInt16() (x int16, err error) {
 	if err = binary.Read(sop.rd, binary.BigEndian, &x); err != nil {
 		err = errors.Wrap(err, "error reading int16")
 	}
+
 	return
 }
 
@@ -370,6 +376,7 @@ func (sop *SerializedObjectParser) readUInt32() (x uint32, err error) {
 	if err = binary.Read(sop.rd, binary.BigEndian, &x); err != nil {
 		err = errors.Wrap(err, "error reading uint32")
 	}
+
 	return
 }
 
@@ -377,6 +384,7 @@ func (sop *SerializedObjectParser) readInt32() (x int32, err error) {
 	if err = binary.Read(sop.rd, binary.BigEndian, &x); err != nil {
 		err = errors.Wrap(err, "error reading int32")
 	}
+
 	return
 }
 
@@ -384,6 +392,7 @@ func (sop *SerializedObjectParser) readFloat32() (x float32, err error) {
 	if err = binary.Read(sop.rd, binary.BigEndian, &x); err != nil {
 		err = errors.Wrap(err, "error reading float32")
 	}
+
 	return
 }
 
@@ -391,6 +400,7 @@ func (sop *SerializedObjectParser) readInt64() (x int64, err error) {
 	if err = binary.Read(sop.rd, binary.BigEndian, &x); err != nil {
 		err = errors.Wrap(err, "error reading int64")
 	}
+
 	return
 }
 
@@ -398,6 +408,7 @@ func (sop *SerializedObjectParser) readFloat64() (x float64, err error) {
 	if err = binary.Read(sop.rd, binary.BigEndian, &x); err != nil {
 		err = errors.Wrap(err, "error reading float64")
 	}
+
 	return
 }
 
