@@ -15,6 +15,7 @@ import (
 // ParseSerializedObject parses a serialized java object.
 func ParseSerializedObject(buf []byte) (content []interface{}, err error) {
 	sop := NewSerializedObjectParser(bytes.NewReader(buf))
+
 	return sop.ParseSerializedObject()
 }
 
@@ -23,17 +24,21 @@ func (sop *SerializedObjectParser) ParseSerializedObject() (content []interface{
 	if err = sop.magic(); err != nil {
 		return
 	}
+
 	if err = sop.version(); err != nil {
 		return
 	}
+
 	for !sop.end() {
 		var nxt interface{}
 		if nxt, err = sop.content(nil); err != nil {
 			if errors.Cause(err) == io.EOF {
 				err = errors.New("premature end of input")
 			}
+
 			return
 		}
+
 		content = append(content, nxt)
 	}
 	return
@@ -45,12 +50,12 @@ func ParseSerializedObjectMinimal(buf []byte) (content []interface{}, err error)
 	if content, err = ParseSerializedObject(buf); err == nil {
 		content = jsonFriendlyArray(content)
 	}
+
 	return
 }
 
-// jsonFriendlyObject recursively filters / formats object fields to be as simple / JSON-like as possible
+// jsonFriendlyObject recursively filters / formats object fields to be as simple / JSON-like as possible.
 func jsonFriendlyObject(obj interface{}) (jsonObj interface{}) {
-
 	if m, isMap := obj.(map[string]interface{}); isMap {
 
 		jsonMap := jsonFriendlyMap(m)
@@ -65,7 +70,6 @@ func jsonFriendlyObject(obj interface{}) (jsonObj interface{}) {
 		}
 
 		return
-
 	}
 
 	if arr, isArray := obj.([]interface{}); isArray {
@@ -78,7 +82,7 @@ func jsonFriendlyObject(obj interface{}) (jsonObj interface{}) {
 
 }
 
-// jsonFriendlyArray recursively filters / formats a deserialized array
+// jsonFriendlyArray recursively filters / formats a deserialized array.
 func jsonFriendlyArray(arrayObj []interface{}) (jsonArray []interface{}) {
 	jsonArray = make([]interface{}, len(arrayObj))
 	for idx, arrayMember := range arrayObj {
@@ -87,9 +91,8 @@ func jsonFriendlyArray(arrayObj []interface{}) (jsonArray []interface{}) {
 	return
 }
 
-// jsonFriendlyMap recursively filters / formats a deserialized map
+// jsonFriendlyMap recursively filters / formats a deserialized map.
 func jsonFriendlyMap(mapObj map[string]interface{}) (jsonMap map[string]interface{}) {
-
 	jsonMap = make(map[string]interface{})
 
 	for k, v := range mapObj {
@@ -124,7 +127,7 @@ func init() {
 	}
 }
 
-// typeNames includes all known type names
+// typeNames includes all known type names.
 var typeNames = []string{
 	"Null",
 	"Reference",
@@ -143,10 +146,10 @@ var typeNames = []string{
 	"Enum",
 }
 
-// typeNameMax is used to ensure an encountered type is known
+// typeNameMax is used to ensure an encountered type is known.
 var typeNameMax = uint8(len(typeNames) - 1)
 
-// allowedClazzNames includes all allowed names when parsing a class descriptor
+// allowedClazzNames includes all allowed names when parsing a class descriptor.
 var allowedClazzNames = map[string]bool{
 	"ClassDesc":      true,
 	"ProxyClassDesc": true,
@@ -154,16 +157,16 @@ var allowedClazzNames = map[string]bool{
 	"Reference":      true,
 }
 
-// parser is a func capable of reading a single serialized type
+// parser is a func capable of reading a single serialized type.
 type parser func(sop *SerializedObjectParser) (interface{}, error)
 
-// knownParsers maps serialized names to corresponding parser implementations
+// knownParsers maps serialized names to corresponding parser implementations.
 var knownParsers map[string]parser
 
-// PostProc handlers are used to format deserialized objects for easier consumption
+// PostProc handlers are used to format deserialized objects for easier consumption.
 type PostProc func(map[string]interface{}, []interface{}) (map[string]interface{}, error)
 
-// KnownPostProcs maps serialized object signatures to PostProc implementations
+// KnownPostProcs maps serialized object signatures to PostProc implementations.
 var KnownPostProcs = map[string]PostProc{
 	"java.util.ArrayList@7881d21d99c7619d":  listPostProc,
 	"java.util.ArrayDeque@207cda2e240da08b": listPostProc,
@@ -174,15 +177,16 @@ var KnownPostProcs = map[string]PostProc{
 	"java.util.Date@686a81014b597419":       datePostProc,
 }
 
-// primitiveHandler are used to read primitive values
+// primitiveHandler are used to read primitive values.
 type primitiveHandler func(sop *SerializedObjectParser) (interface{}, error)
 
-// primitiveHandlers maps serialized primitive identifiers to a corresponding primitiveHandler
+// primitiveHandlers maps serialized primitive identifiers to a corresponding primitiveHandler.
 var primitiveHandlers = map[string]primitiveHandler{
 	"B": func(sop *SerializedObjectParser) (b interface{}, err error) {
 		if b, err = sop.readInt8(); err != nil {
 			err = errors.Wrap(err, "error reading byte primitive")
 		}
+
 		return
 	},
 	"C": func(sop *SerializedObjectParser) (char interface{}, err error) {
@@ -192,36 +196,42 @@ var primitiveHandlers = map[string]primitiveHandler{
 		} else {
 			char = string(rune(charCode))
 		}
+
 		return
 	},
 	"D": func(sop *SerializedObjectParser) (double interface{}, err error) {
 		if double, err = sop.readFloat64(); err != nil {
 			err = errors.Wrap(err, "error reading double primitive")
 		}
+
 		return
 	},
 	"F": func(sop *SerializedObjectParser) (f32 interface{}, err error) {
 		if f32, err = sop.readFloat32(); err != nil {
 			err = errors.Wrap(err, "error reading float primitive")
 		}
+
 		return
 	},
 	"I": func(sop *SerializedObjectParser) (i32 interface{}, err error) {
 		if i32, err = sop.readInt32(); err != nil {
 			err = errors.Wrap(err, "error reading int primitive")
 		}
+
 		return
 	},
 	"J": func(sop *SerializedObjectParser) (long interface{}, err error) {
 		if long, err = sop.readInt64(); err != nil {
 			err = errors.Wrap(err, "error reading long primitive")
 		}
+
 		return
 	},
 	"S": func(sop *SerializedObjectParser) (short interface{}, err error) {
 		if short, err = sop.readInt16(); err != nil {
 			err = errors.Wrap(err, "error reading short primitive")
 		}
+
 		return
 	},
 	"Z": func(sop *SerializedObjectParser) (b interface{}, err error) {
@@ -231,18 +241,21 @@ var primitiveHandlers = map[string]primitiveHandler{
 		} else {
 			b = x != 0
 		}
+
 		return
 	},
 	"L": func(sop *SerializedObjectParser) (obj interface{}, err error) {
 		if obj, err = sop.content(nil); err != nil {
 			err = errors.Wrap(err, "error reading object primitive")
 		}
+
 		return
 	},
 	"[": func(sop *SerializedObjectParser) (arr interface{}, err error) {
 		if arr, err = sop.content(nil); err != nil {
 			err = errors.Wrap(err, "error reading array primitive")
 		}
+
 		return
 	},
 }
@@ -257,7 +270,7 @@ type SerializedObjectParser struct {
 
 const bufferSize = 1024
 
-// newSerializedObjectParser
+// NewSerializedObjectParser reads serialized java objects from stream.
 func NewSerializedObjectParser(rd io.Reader) *SerializedObjectParser {
 	return &SerializedObjectParser{
 		rd: bufio.NewReaderSize(rd, bufferSize),
@@ -265,15 +278,15 @@ func NewSerializedObjectParser(rd io.Reader) *SerializedObjectParser {
 }
 
 // newHandle adds a parsed object to the existing indexed handles which can be used later to lookup references to
-// existing objects
+// existing objects.
 func (sop *SerializedObjectParser) newHandle(obj interface{}) interface{} {
 	sop.handles = append(sop.handles, obj)
+
 	return obj
 }
 
-// content reads the next object in the stream and parses it
+// content reads the next object in the stream and parses it.
 func (sop *SerializedObjectParser) content(allowedNames map[string]bool) (content interface{}, err error) {
-
 	var tc uint8
 	if tc, err = sop.readUInt8(); err != nil {
 		return
