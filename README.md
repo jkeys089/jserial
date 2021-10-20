@@ -21,6 +21,21 @@ if err != nil {
 
 fmt.Println(string(jsonStr))
 ```
+## Usage with io.Reader
+```go
+sop := jserial.NewSerializedObjectParser(reader)
+objects, err := sop.ParseSerializedObjectMinimal() 
+if err != nil {
+    log.Fatalf("%+v", err)
+}
+
+jsonStr, err := json.MarshalIndent(objects, "", "    ")
+if err != nil {
+    log.Fatalf("%+v", err)
+}
+
+fmt.Println(string(jsonStr))
+```
 
 Most of the time you will likely want to use `ParseSerializedObjectMinimal` which returns a simplified / JSON-like 
 object representation. However, `ParseSerializedObject` is available if you need to inspect the detailed class info. 
