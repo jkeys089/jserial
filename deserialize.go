@@ -56,6 +56,16 @@ func ParseSerializedObjectMinimal(buf []byte) (content []interface{}, err error)
 	return
 }
 
+// ParseSerializedObjectMinimal parses a serialized java object from stream
+// and returns the minimal object representation (i.e. without all the class info, etc...).
+func (sop *SerializedObjectParser) ParseSerializedObjectMinimal() (content []interface{}, err error) {
+	if content, err = sop.ParseSerializedObject(); err == nil {
+		content = jsonFriendlyArray(content)
+	}
+
+	return
+}
+
 // jsonFriendlyObject recursively filters / formats object fields to be as simple / JSON-like as possible.
 func jsonFriendlyObject(obj interface{}) (jsonObj interface{}) {
 	if m, isMap := obj.(map[string]interface{}); isMap {
