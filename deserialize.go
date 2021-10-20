@@ -308,6 +308,9 @@ func (sop *SerializedObjectParser) content(allowedNames map[string]bool) (conten
 	tc -= typeMask
 
 	if tc > typeNameMax {
+		// prevents reading unknown ("foreign") byte from the stream
+		sop.rd.UnreadByte() //nolint:errcheck
+
 		err = errors.Errorf("unknown type %#x", tc+typeMask)
 
 		return
