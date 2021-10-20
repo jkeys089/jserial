@@ -24,6 +24,7 @@ fmt.Println(string(jsonStr))
 ## Usage with io.Reader
 ```go
 sop := jserial.NewSerializedObjectParser(reader)
+
 objects, err := sop.ParseSerializedObjectMinimal() 
 if err != nil {
     log.Fatalf("%+v", err)
