@@ -31,8 +31,9 @@ func (sop *SerializedObjectParser) ParseSerializedObject() (content []interface{
 
 	for !sop.end() {
 		var nxt interface{}
+
 		if nxt, err = sop.content(nil); err != nil {
-			if errors.Cause(err) == io.EOF {
+			if errors.Cause(err).Error() == io.EOF.Error() {
 				err = errors.New("premature end of input")
 			}
 
@@ -88,6 +89,7 @@ func jsonFriendlyArray(arrayObj []interface{}) (jsonArray []interface{}) {
 	for idx, arrayMember := range arrayObj {
 		jsonArray[idx] = jsonFriendlyObject(arrayMember)
 	}
+
 	return
 }
 
@@ -107,7 +109,6 @@ func jsonFriendlyMap(mapObj map[string]interface{}) (jsonMap map[string]interfac
 	}
 
 	return
-
 }
 
 func init() {
@@ -288,46 +289,55 @@ func (sop *SerializedObjectParser) newHandle(obj interface{}) interface{} {
 // content reads the next object in the stream and parses it.
 func (sop *SerializedObjectParser) content(allowedNames map[string]bool) (content interface{}, err error) {
 	var tc uint8
+
 	if tc, err = sop.readUInt8(); err != nil {
 		return
 	}
 
-	tc -= 0x70
+	const typeMask = 0x70
+	tc -= typeMask
+
 	if tc > typeNameMax {
-		err = errors.Errorf("unknown type %#x", tc+0x70)
+		err = errors.Errorf("unknown type %#x", tc+typeMask)
+
 		return
 	}
 
 	name := typeNames[tc]
 	if allowedNames != nil && !allowedNames[name] {
 		err = errors.Errorf("%s not allowed here", name)
+
 		return
 	}
 
 	parse, exists := knownParsers[name]
 	if !exists {
 		err = errors.Errorf("parsing %s is currently not supported", name)
+
 		return
 	}
 
 	return parse(sop)
-
 }
 
-// end check has next byte in stream
+// end check has next byte in stream.
 func (sop *SerializedObjectParser) end() bool {
 	if sop.rd.Buffered() == 0 {
 		_, eof := sop.rd.Peek(1)
+
 		return eof != nil
 	}
+
 	return false
 }
 
-// readString reads a string of length cnt bytes
+// readString reads a string of length cnt bytes.
 func (sop *SerializedObjectParser) readString(cnt int, asHex bool) (s string, err error) {
 	sop.buf.Reset()
+
 	if _, err = io.CopyN(&sop.buf, sop.rd, int64(cnt)); err != nil {
 		err = errors.Wrap(err, "error reading string")
+
 		return
 	}
 
@@ -349,7 +359,7 @@ func (sop *SerializedObjectParser) readUInt8() (x uint8, err error) {
 }
 
 func (sop *SerializedObjectParser) readInt8() (x int8, err error) {
-	if err := binary.Read(sop.rd, binary.BigEndian, &x); err != nil {
+	if err = binary.Read(sop.rd, binary.BigEndian, &x); err != nil {
 		err = errors.Wrap(err, "error reading int8")
 	}
 
@@ -412,12 +422,13 @@ func (sop *SerializedObjectParser) readFloat64() (x float64, err error) {
 	return
 }
 
-// utf reads a variable length string
+// utf reads a variable length string.
 func (sop *SerializedObjectParser) utf() (s string, err error) {
-
 	var offset uint16
+
 	if offset, err = sop.readUInt16(); err != nil {
 		err = errors.Wrap(err, "error reading utf: unable to read segment length")
+
 		return
 	}
 
@@ -426,25 +437,27 @@ func (sop *SerializedObjectParser) utf() (s string, err error) {
 	}
 
 	return
-
 }
 
-// utf reads a large (up to 2^32 bytes) variable length string
+// utf reads a large (up to 2^32 bytes) variable length string.
 func (sop *SerializedObjectParser) utfLong() (s string, err error) {
-
 	var offset uint32
+
 	if offset, err = sop.readUInt32(); err != nil {
 		err = errors.Wrap(err, "error reading utf: unable to read first segment length")
+
 		return
 	}
 
 	if offset != 0 {
 		err = errors.New("unable to read string larger than 2^32 bytes")
+
 		return
 	}
 
 	if offset, err = sop.readUInt32(); err != nil {
 		err = errors.Wrap(err, "error reading utf long: unable to read second segment length")
+
 		return
 	}
 
@@ -453,46 +466,56 @@ func (sop *SerializedObjectParser) utfLong() (s string, err error) {
 	}
 
 	return
-
 }
 
-// magic checks for the presence of the STREAM_MAGIC value
+// magic checks for the presence of the STREAM_MAGIC value.
 func (sop *SerializedObjectParser) magic() error {
 	magicVal, err := sop.readUInt16()
+
 	if err == nil && magicVal != 0xaced {
-		err = errors.New("magic value STREAM_MAGIC not found")
+		return errors.New("magic value STREAM_MAGIC not found")
 	}
+
 	return err
 }
 
-// version checks to be sure the serialized object is using a supported protocol version
+// version checks to be sure the serialized object is using a supported protocol version.
 func (sop *SerializedObjectParser) version() error {
 	ver, err := sop.readUInt16()
-	if ver != 5 {
-		err = errors.Errorf("protocol version not recognized: wanted 5 got %d", ver)
+	if err != nil {
+		return err
 	}
-	return err
+
+	const protocolVersion = 5
+	if ver != protocolVersion {
+		return errors.Errorf("protocol version not recognized: wanted 5 got %d", ver)
+	}
+
+	return nil
 }
 
-// field contains info about a single class member
+// field contains info about a single class member.
 type field struct {
 	className string
 	typeName  string
 	name      string
 }
 
-// fieldDesc reads a single field descriptor
+// fieldDesc reads a single field descriptor.
 func (sop *SerializedObjectParser) fieldDesc() (f *field, err error) {
-
 	var typeDec uint8
+
 	if typeDec, err = sop.readUInt8(); err != nil {
 		err = errors.Wrap(err, "error reading field type")
+
 		return
 	}
 
 	var name string
+
 	if name, err = sop.utf(); err != nil {
 		err = errors.Wrap(err, "error reading field name")
+
 		return
 	}
 
@@ -503,12 +526,15 @@ func (sop *SerializedObjectParser) fieldDesc() (f *field, err error) {
 		name:     name,
 	}
 
-	if strings.Contains("[L", typeName) {
+	if strings.Contains("[L", typeName) { //nolint
 		var className interface{}
+
 		if className, err = sop.content(nil); err != nil {
 			err = errors.Wrap(err, "error reading field class name")
+
 			return
 		}
+
 		var isString bool
 		if f.className, isString = className.(string); !isString {
 			err = errors.New("unexpected field class name type")
@@ -516,26 +542,30 @@ func (sop *SerializedObjectParser) fieldDesc() (f *field, err error) {
 	}
 
 	return
-
 }
 
-// annotations reads all class annotations
+// annotations reads all class annotations.
 func (sop *SerializedObjectParser) annotations(allowedNames map[string]bool) (anns []interface{}, err error) {
 	for {
 		var ann interface{}
+
 		if ann, err = sop.content(allowedNames); err != nil {
 			err = errors.Wrap(err, "error reading class annotation")
+
 			return
 		}
+
 		if _, isEndBlock := ann.(endBlockT); isEndBlock {
 			break
 		}
+
 		anns = append(anns, ann)
 	}
+
 	return
 }
 
-// clazz contains java class info
+// clazz contains java class info.
 type clazz struct {
 	super            *clazz
 	annotations      []interface{}
@@ -546,12 +576,13 @@ type clazz struct {
 	isEnum           bool
 }
 
-// classDesc reads a class descriptor
+// classDesc reads a class descriptor.
 func (sop *SerializedObjectParser) classDesc() (cls *clazz, err error) {
-
 	var x interface{}
+
 	if x, err = sop.content(allowedClazzNames); err != nil {
 		err = errors.Wrap(err, "error reading class description")
+
 		return
 	}
 
@@ -565,26 +596,30 @@ func (sop *SerializedObjectParser) classDesc() (cls *clazz, err error) {
 	}
 
 	return
-
 }
 
-// parseClassDesc parses a class descriptor
+// parseClassDesc parses a class descriptor.
+//nolint:funlen
 func parseClassDesc(sop *SerializedObjectParser) (x interface{}, err error) {
-
 	cls := &clazz{}
 
 	if cls.name, err = sop.utf(); err != nil {
 		err = errors.Wrap(err, "error reading class name")
+
 		return
 	}
 
-	if len(cls.name) < 2 {
+	const minClassNameLength = 2
+	if len(cls.name) < minClassNameLength {
 		err = errors.Wrapf(err, "invalid class name: '%s'", cls.name)
+
 		return
 	}
 
-	if cls.serialVersionUID, err = sop.readString(8, true); err != nil {
+	const serialVersionUIDLength = 8
+	if cls.serialVersionUID, err = sop.readString(serialVersionUIDLength, true); err != nil {
 		err = errors.Wrap(err, "error reading class serialVersionUID")
+
 		return
 	}
 
@@ -592,69 +627,86 @@ func parseClassDesc(sop *SerializedObjectParser) (x interface{}, err error) {
 
 	if cls.flags, err = sop.readUInt8(); err != nil {
 		err = errors.Wrap(err, "error reading class flags")
+
 		return
 	}
 
 	cls.isEnum = (cls.flags & 0x10) != 0
 
 	var fieldCount uint16
+
 	if fieldCount, err = sop.readUInt16(); err != nil {
 		err = errors.Wrap(err, "error reading class field count")
+
 		return
 	}
 
 	for i := 0; i < int(fieldCount); i++ {
 		var f *field
+
 		if f, err = sop.fieldDesc(); err != nil {
 			err = errors.Wrap(err, "error reading class field")
+
 			return
 		}
+
 		cls.fields = append(cls.fields, f)
 	}
 
 	if cls.annotations, err = sop.annotations(nil); err != nil {
 		err = errors.Wrap(err, "error reading class annotations")
+
 		return
 	}
 
 	if cls.super, err = sop.classDesc(); err != nil {
 		err = errors.Wrap(err, "error reading class super")
+
 		return
 	}
 
 	x = cls
 
 	return
-
 }
 
 func parseClass(sop *SerializedObjectParser) (cd interface{}, err error) {
 	if cd, err = sop.classDesc(); err != nil {
 		err = errors.Wrap(err, "error parsing class")
+
 		return
 	}
+
 	cd = sop.newHandle(cd)
+
 	return
 }
 
 func parseReference(sop *SerializedObjectParser) (ref interface{}, err error) {
 	var refIdx int32
+
 	if refIdx, err = sop.readInt32(); err != nil {
 		err = errors.Wrap(err, "error reading reference index")
+
 		return
 	}
-	i := int(refIdx - 0x7e0000)
+
+	const refIDMask = 0x7e0000
+	i := int(refIdx - refIDMask)
+
 	if i > -1 && i < len(sop.handles) {
 		ref = sop.handles[i]
 	}
+
 	return
 }
 
 func parseArray(sop *SerializedObjectParser) (arr interface{}, err error) {
-
 	var cls *clazz
+
 	if cls, err = sop.classDesc(); err != nil {
 		err = errors.Wrap(err, "error parsing array class")
+
 		return
 	}
 
@@ -665,8 +717,10 @@ func parseArray(sop *SerializedObjectParser) (arr interface{}, err error) {
 	sop.newHandle(res)
 
 	var size int32
+
 	if size, err = sop.readInt32(); err != nil {
 		err = errors.Wrap(err, "error reading array size")
+
 		return
 	}
 
@@ -679,48 +733,57 @@ func parseArray(sop *SerializedObjectParser) (arr interface{}, err error) {
 	primHandler, exists := primitiveHandlers[string(cls.name[1])]
 	if !exists {
 		err = errors.Errorf("unknown field type '%s'", string(cls.name[1]))
+
 		return
 	}
 
 	var array []interface{}
+
 	for i := 0; i < int(size); i++ {
 		var nxt interface{}
+
 		if nxt, err = primHandler(sop); err != nil {
 			err = errors.Wrap(err, "error reading primitive array member")
+
 			return
 		}
+
 		array = append(array, nxt)
 	}
 
 	arr = array
 
 	return
-
 }
 
-// newDeferredHandle reserves an object handle slot and returns a func which can set the slot value at a later time
+// newDeferredHandle reserves an object handle slot and returns a func which can set the slot value at a later time.
 func (sop *SerializedObjectParser) newDeferredHandle() func(interface{}) interface{} {
 	idx := len(sop.handles)
 	sop.handles = append(sop.handles, nil)
+
 	return func(obj interface{}) interface{} {
 		sop.handles[idx] = obj
+
 		return obj
 	}
 }
 
 func parseEnum(sop *SerializedObjectParser) (enum interface{}, err error) {
-
 	var cls *clazz
+
 	if cls, err = sop.classDesc(); err != nil {
 		err = errors.Wrap(err, "error parsing enum class")
+
 		return
 	}
 
 	deferredHandle := sop.newDeferredHandle()
 
 	var enumConstant interface{}
+
 	if enumConstant, err = sop.content(nil); err != nil {
 		err = errors.Wrap(err, "error parsing enum constant")
+
 		return
 	}
 
@@ -732,33 +795,43 @@ func parseEnum(sop *SerializedObjectParser) (enum interface{}, err error) {
 	enum = deferredHandle(res)
 
 	return
-
 }
 
 func parseBlockData(sop *SerializedObjectParser) (bd interface{}, err error) {
 	var size uint8
+
 	if size, err = sop.readUInt8(); err != nil {
 		err = errors.Wrap(err, "error parsing block data size")
+
 		return
 	}
+
 	data := make([]byte, size)
+
 	if _, err = io.ReadFull(sop.rd, data); err == nil {
 		bd = data
 	}
+
 	return
 }
 
 func parseBlockDataLong(sop *SerializedObjectParser) (bdl interface{}, err error) {
 	var size uint32
+
 	if size, err = sop.readUInt32(); err != nil {
 		err = errors.Wrap(err, "error parsing block data long size")
+
 		return
 	}
+
 	data := make([]byte, size)
+
 	if _, err = io.ReadFull(sop.rd, data); err == nil {
 		bdl = data
+
 		return
 	}
+
 	return
 }
 
@@ -768,6 +841,7 @@ func parseString(sop *SerializedObjectParser) (str interface{}, err error) {
 	} else {
 		str = sop.newHandle(str)
 	}
+
 	return
 }
 
@@ -777,6 +851,7 @@ func parseLongString(sop *SerializedObjectParser) (longStr interface{}, err erro
 	} else {
 		sop.newHandle(longStr)
 	}
+
 	return
 }
 
@@ -792,44 +867,50 @@ func parseEndBlockData(_ *SerializedObjectParser) (interface{}, error) {
 	return endBlock, nil
 }
 
-// values reads primitive field values
+// values reads primitive field values.
 func (sop *SerializedObjectParser) values(cls *clazz) (vals map[string]interface{}, err error) {
-
 	var exists bool
+
 	var handler primitiveHandler
+
 	vals = make(map[string]interface{})
 
 	for _, field := range cls.fields {
 		if field == nil {
 			continue
 		}
+
 		if handler, exists = primitiveHandlers[field.typeName]; !exists {
 			err = errors.Errorf("unknown field type '%s'", field.typeName)
+
 			return
 		}
+
 		if vals[field.name], err = handler(sop); err != nil {
 			err = errors.Wrap(err, "error reading primitive field value")
+
 			return
 		}
 	}
 
 	return
-
 }
 
-// annotationsAsMap reads values (when isBlock is false) and merges annotations then calls any relevant post processor
+// annotationsAsMap reads values (when isBlock is false) and merges annotations then calls any relevant post processor.
 func (sop *SerializedObjectParser) annotationsAsMap(cls *clazz, isBlock bool) (data map[string]interface{}, err error) {
-
 	if isBlock {
 		data = make(map[string]interface{})
 	} else if data, err = sop.values(cls); err != nil {
 		err = errors.Wrap(err, "error reading class data field values")
+
 		return
 	}
 
 	var anns []interface{}
+
 	if anns, err = sop.annotations(nil); err != nil {
 		err = errors.Wrap(err, "error reading annotations")
+
 		return
 	}
 
@@ -842,39 +923,42 @@ func (sop *SerializedObjectParser) annotationsAsMap(cls *clazz, isBlock bool) (d
 	}
 
 	return
-
 }
 
-// classData reads a serialized class into a generic data structure
+// classData reads a serialized class into a generic data structure.
 func (sop *SerializedObjectParser) classData(cls *clazz) (data map[string]interface{}, err error) {
-
 	if cls == nil {
 		return nil, errors.New("invalid class definition: nil")
 	}
 
+	const (
+		ScSerializableWithoutWriteMethod = 0x02
+		ScSerializableWithWriteMethod    = 0x03
+		ScExternalizeWithBlockData       = 0x04
+		ScExternalizeWithoutBlockData    = 0x0c
+	)
+
 	switch cls.flags & 0x0f {
-	case 0x02: // SC_SERIALIZABLE without SC_WRITE_METHOD
+	case ScSerializableWithoutWriteMethod: // SC_SERIALIZABLE without SC_WRITE_METHOD
 		return sop.values(cls)
 
-	case 0x03: // SC_SERIALIZABLE with SC_WRITE_METHOD
+	case ScSerializableWithWriteMethod: // SC_SERIALIZABLE with SC_WRITE_METHOD
 		return sop.annotationsAsMap(cls, false)
 
-	case 0x04: // SC_EXTERNALIZABLE without SC_BLOCKDATA
+	case ScExternalizeWithBlockData: // SC_EXTERNALIZABLE without SC_BLOCKDATA
 		return nil, errors.New("unable to parse version 1 external content")
 
-	case 0x0c: // SC_EXTERNALIZABLE with SC_BLOCKDATA
+	case ScExternalizeWithoutBlockData: // SC_EXTERNALIZABLE with SC_BLOCKDATA
 		return sop.annotationsAsMap(cls, true)
 
 	default:
 		return nil, errors.Errorf("unable to deserialize class with flags %#x", cls.flags)
 	}
-
 }
 
-// recursiveClassData recursively reads inheritance tree until it reaches java.lang.object
+// recursiveClassData recursively reads inheritance tree until it reaches java.lang.object.
 func (sop *SerializedObjectParser) recursiveClassData(cls *clazz, obj map[string]interface{},
 	seen map[*clazz]bool) error {
-
 	if cls == nil {
 		return nil
 	}
@@ -905,14 +989,14 @@ func (sop *SerializedObjectParser) recursiveClassData(cls *clazz, obj map[string
 	}
 
 	return nil
-
 }
 
 func parseObject(sop *SerializedObjectParser) (obj interface{}, err error) {
-
 	var cls *clazz
+
 	if cls, err = sop.classDesc(); err != nil {
 		err = errors.Wrap(err, "error reading object class")
+
 		return
 	}
 
@@ -926,49 +1010,51 @@ func parseObject(sop *SerializedObjectParser) (obj interface{}, err error) {
 	seen := map[*clazz]bool{}
 	if err = sop.recursiveClassData(cls, objMap, seen); err != nil {
 		err = errors.Wrap(err, "error reading recursive class data")
+
 		return
 	}
 
 	obj = deferredHandle(objMap)
 
 	return
-
 }
 
-// postProcSize reads the object size as an int32 from the first data element
+// postProcSize reads the object size as an int32 from the first data element.
 func postProcSize(data []interface{}, offset int) (size int, err error) {
-
 	if len(data) < 1 {
 		err = errors.New("invalid data: at least one element required")
+
 		return
 	}
 
 	b, isByteSlice := data[0].([]byte)
 	if !isByteSlice {
 		err = errors.New("unexpected data at position 0")
+
 		return
 	}
 
-	if len(b) < offset+4 {
-		err = errors.Errorf("incorrect data at position 0: wanted at least %d bytes, got %d", offset+4, len(b))
+	const minLength = 4
+	if len(b) < offset+minLength {
+		err = errors.Errorf("incorrect data at position 0: wanted at least %d bytes, got %d", offset+minLength, len(b))
+
 		return
 	}
 
 	var size32 int32
-	if err = binary.Read(bytes.NewReader(b[offset:offset+4]), binary.BigEndian, &size32); err != nil {
+	if err = binary.Read(bytes.NewReader(b[offset:]), binary.BigEndian, &size32); err != nil {
 		err = errors.Wrap(err, "error reading size")
+
 		return
 	}
 
 	size = int(size32)
 
 	return
-
 }
 
-// listPostProc populates the object value with a []interface{}
+// listPostProc populates the object value with a []interface{}.
 func listPostProc(fields map[string]interface{}, data []interface{}) (map[string]interface{}, error) {
-
 	size, err := postProcSize(data, 0)
 	if err != nil {
 		return nil, err
@@ -985,12 +1071,10 @@ func listPostProc(fields map[string]interface{}, data []interface{}) (map[string
 	}
 
 	return fields, err
-
 }
 
-// mapPostProc populates the object value with a map of key/value pairs
+// mapPostProc populates the object value with a map of key/value pairs.
 func mapPostProc(fields map[string]interface{}, data []interface{}) (map[string]interface{}, error) {
-
 	size, err := postProcSize(data, 4)
 	if err != nil {
 		return nil, err
@@ -1005,6 +1089,7 @@ func mapPostProc(fields map[string]interface{}, data []interface{}) (map[string]
 	for i := 0; i < size; i++ {
 		key := data[2*i+1]
 		value := data[2*i+2]
+
 		if s, isString := key.(string); isString {
 			m[s] = value
 		}
@@ -1013,12 +1098,10 @@ func mapPostProc(fields map[string]interface{}, data []interface{}) (map[string]
 	fields["value"] = m
 
 	return fields, nil
-
 }
 
-// enumMapPostProc populates the object value with a map of key/value pairs where keys are enum constants
+// enumMapPostProc populates the object value with a map of key/value pairs where keys are enum constants.
 func enumMapPostProc(fields map[string]interface{}, data []interface{}) (map[string]interface{}, error) {
-
 	size, err := postProcSize(data, 0)
 	if err != nil {
 		return nil, err
@@ -1033,6 +1116,7 @@ func enumMapPostProc(fields map[string]interface{}, data []interface{}) (map[str
 	for i := 0; i < size; i++ {
 		key := data[2*i+1]
 		value := data[2*i+2]
+
 		if mk, isMap := key.(map[string]interface{}); isMap {
 			if s, isString := mk["value"].(string); isString {
 				m[s] = value
@@ -1043,12 +1127,10 @@ func enumMapPostProc(fields map[string]interface{}, data []interface{}) (map[str
 	fields["value"] = m
 
 	return fields, nil
-
 }
 
-// hashSetPostProc populates the object value with a map of key/value pairs
+// hashSetPostProc populates the object value with a map of key/value pairs.
 func hashSetPostProc(fields map[string]interface{}, data []interface{}) (map[string]interface{}, error) {
-
 	size, err := postProcSize(data, 8)
 	if err != nil {
 		return nil, err
@@ -1072,12 +1154,10 @@ func hashSetPostProc(fields map[string]interface{}, data []interface{}) (map[str
 	fields["value"] = m
 
 	return fields, nil
-
 }
 
-// datePostProc populates the object value with a time.Time
+// datePostProc populates the object value with a time.Time.
 func datePostProc(fields map[string]interface{}, data []interface{}) (map[string]interface{}, error) {
-
 	if len(data) < 1 {
 		return nil, errors.New("invalid data: at least one element required")
 	}
@@ -1087,17 +1167,17 @@ func datePostProc(fields map[string]interface{}, data []interface{}) (map[string
 		return nil, errors.New("unexpected data at position 0")
 	}
 
-	if len(b) < 8 {
+	const timestampBlockSize = 8
+	if len(b) < timestampBlockSize {
 		return nil, errors.Errorf("incorrect data at position 0: wanted 8 bytes, got %d", len(b))
 	}
 
 	var timestamp int64
-	if err := binary.Read(bytes.NewReader(b[0:8]), binary.BigEndian, &timestamp); err != nil {
+	if err := binary.Read(bytes.NewReader(b[0:timestampBlockSize]), binary.BigEndian, &timestamp); err != nil {
 		return nil, errors.Wrap(err, "error reading timestamp")
 	}
 
 	fields["value"] = time.Unix(0, timestamp*int64(time.Millisecond))
 
 	return fields, nil
-
 }
