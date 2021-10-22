@@ -119,6 +119,7 @@ func TestStringPrematureEnd(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), expectedErrStr) {
 		t.Fail()
 	}
+	expectedErrStr = "block data exceeds size"
 	err = getErr(streamMagic + streamVersion + tcString + "00" + strValAsHex)
 	if err == nil || !strings.Contains(err.Error(), expectedErrStr) {
 		t.Fail()

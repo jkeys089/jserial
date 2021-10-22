@@ -14,7 +14,8 @@ import (
 
 // ParseSerializedObject parses a serialized java object.
 func ParseSerializedObject(buf []byte) (content []interface{}, err error) {
-	sop := NewSerializedObjectParser(bytes.NewReader(buf))
+	option := SetMaxDataBlockSize(len(buf))
+	sop := NewSerializedObjectParser(bytes.NewReader(buf), option)
 
 	return sop.ParseSerializedObject()
 }
@@ -274,18 +275,37 @@ var primitiveHandlers = map[string]primitiveHandler{
 // SerializedObjectParser reads serialized java objects
 // see: https://docs.oracle.com/javase/8/docs/platform/serialization/spec/protocol.html
 type SerializedObjectParser struct {
-	buf     bytes.Buffer
-	rd      *bufio.Reader
-	handles []interface{}
+	buf              bytes.Buffer
+	rd               *bufio.Reader
+	handles          []interface{}
+	maxDataBlockSize int
 }
 
 const bufferSize = 1024
 
-// NewSerializedObjectParser reads serialized java objects from stream.
-func NewSerializedObjectParser(rd io.Reader) *SerializedObjectParser {
-	return &SerializedObjectParser{
-		rd: bufio.NewReaderSize(rd, bufferSize),
+type Option func(sop *SerializedObjectParser)
+
+// SetMaxDataBlockSize set the maximum size of the parsed data block,
+// by default it is equal to the value of the buffer size bufio.Reader or size of bytes.Reader.
+func SetMaxDataBlockSize(maxSize int) Option {
+	return func(sop *SerializedObjectParser) {
+		sop.maxDataBlockSize = maxSize
 	}
+}
+
+// NewSerializedObjectParser reads serialized java objects from stream.
+func NewSerializedObjectParser(rd io.Reader, options ...Option) *SerializedObjectParser {
+	buf := bufio.NewReaderSize(rd, bufferSize)
+	sop := &SerializedObjectParser{
+		rd:               buf,
+		maxDataBlockSize: buf.Size(),
+	}
+
+	for _, option := range options {
+		option(sop)
+	}
+
+	return sop
 }
 
 // newHandle adds a parsed object to the existing indexed handles which can be used later to lookup references to
@@ -347,6 +367,14 @@ func (sop *SerializedObjectParser) end() bool {
 // readString reads a string of length cnt bytes.
 func (sop *SerializedObjectParser) readString(cnt int, asHex bool) (s string, err error) {
 	sop.buf.Reset()
+
+	// Prevented to allocate an extremely large block of memory.
+	if cnt > sop.maxDataBlockSize {
+		err = errors.Errorf("block data exceeds size of reader buffer. " +
+			"To increase the size, use the method SetMaxDataBlockSize or use bufio.Reader with a larger buffer size")
+
+		return
+	}
 
 	if _, err = io.CopyN(&sop.buf, sop.rd, int64(cnt)); err != nil {
 		err = errors.Wrap(err, "error reading string")
@@ -833,6 +861,14 @@ func parseBlockDataLong(sop *SerializedObjectParser) (bdl interface{}, err error
 
 	if size, err = sop.readUInt32(); err != nil {
 		err = errors.Wrap(err, "error parsing block data long size")
+
+		return
+	}
+
+	// Prevented to allocate an extremely large block of memory.
+	if int(size) > sop.maxDataBlockSize {
+		err = errors.Errorf("block data exceeds size of reader buffer. " +
+			"To increase the size, use the method SetMaxDataBlockSize or use bufio.Reader with a larger buffer size")
 
 		return
 	}
