@@ -47,6 +47,20 @@ func (sop *SerializedObjectParser) ParseSerializedObject() (content []interface{
 	return
 }
 
+// ParseSingleObject parses a serialized java object from stream.
+func ParseSingleObject(r io.Reader) (c interface{}, err error) {
+	sop := newUnbufferedObjectParser(r)
+	if err = sop.magic(); err != nil {
+		return
+	}
+
+	if err = sop.version(); err != nil {
+		return
+	}
+
+	return sop.content(nil)
+}
+
 // ParseSerializedObjectMinimal parses a serialized java object and returns the minimal object representation
 // (i.e. without all the class info, etc...).
 func ParseSerializedObjectMinimal(buf []byte) (content []interface{}, err error) {
@@ -276,7 +290,7 @@ var primitiveHandlers = map[string]primitiveHandler{
 // see: https://docs.oracle.com/javase/8/docs/platform/serialization/spec/protocol.html
 type SerializedObjectParser struct {
 	buf              bytes.Buffer
-	rd               *bufio.Reader
+	rd               io.Reader
 	handles          []interface{}
 	maxDataBlockSize int
 }
@@ -291,6 +305,16 @@ func SetMaxDataBlockSize(maxSize int) Option {
 	return func(sop *SerializedObjectParser) {
 		sop.maxDataBlockSize = maxSize
 	}
+}
+
+// newUnbufferedObjectParser reads serialized java objects from stream.
+func newUnbufferedObjectParser(rd io.Reader) *SerializedObjectParser {
+	sop := &SerializedObjectParser{
+		rd:               rd,
+		maxDataBlockSize: bufferSize,
+	}
+
+	return sop
 }
 
 // NewSerializedObjectParser reads serialized java objects from stream.
@@ -328,8 +352,10 @@ func (sop *SerializedObjectParser) content(allowedNames map[string]bool) (conten
 	tc -= typeMask
 
 	if tc > typeNameMax {
-		// prevents reading unknown ("foreign") byte from the stream
-		sop.rd.UnreadByte() //nolint:errcheck
+		if br, buffered := sop.rd.(*bufio.Reader); buffered {
+			// prevents reading unknown ("foreign") byte from the stream
+			br.UnreadByte() //nolint:errcheck
+		}
 
 		err = errors.Errorf("unknown type %#x", tc+typeMask)
 
@@ -355,13 +381,15 @@ func (sop *SerializedObjectParser) content(allowedNames map[string]bool) (conten
 
 // end check has next byte in stream.
 func (sop *SerializedObjectParser) end() bool {
-	if sop.rd.Buffered() == 0 {
-		_, eof := sop.rd.Peek(1)
+	if br, buffered := sop.rd.(*bufio.Reader); buffered {
+		if br.Buffered() == 0 {
+			_, eof := br.Peek(1)
 
-		return eof != nil
+			return eof != nil
+		}
+		return false
 	}
-
-	return false
+	return true
 }
 
 // readString reads a string of length cnt bytes.
